@@ -1,0 +1,6 @@
+{
+    "name": "ESP32",
+    "detectedName": "ESP32",
+    "firmwareType": "micropython",
+    "version": "1.20.0"
+}
