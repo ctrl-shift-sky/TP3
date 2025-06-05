@@ -1,29 +1,24 @@
-from machine import Pin, ADC
+from machine import Pin, Timer
 import network
 import socket
 import time
 import onewire
 import ds18x20
-from stepper import Stepper  # Requires Stepper.py library
 
-# Hardware Configuration
-TEMP_PIN = Pin(22)  # Assuming DS18B20 on GPIO22
-STEP_PINS = [19, 18, 5, 17]  # Adjust based on your wiring
+TEMP_PIN = Pin(22)  # DS18B20
+STEP_PIN = Pin(19, Pin.OUT)  
+DIR_PIN = Pin(18, Pin.OUT)   
 
-# Initialize components
 ow = onewire.OneWire(TEMP_PIN)
 ds = ds18x20.DS18X20(ow)
-stepper = Stepper(STEP_PINS[0], STEP_PINS[1], STEP_PINS[2], STEP_PINS[3], delay=2)
 
-# WiFi Configuration
 ssid = 'TR'
 password = '123456789'
 wlan = network.WLAN(network.STA_IF)
 
-# State variables
-LED1_state = "OFF"
-LED2_state = "OFF"
 current_temp = "N/A"
+speed = 10         
+direction = 1      
 
 def connect_wifi():
     wlan.active(True)
@@ -45,20 +40,37 @@ def read_temperature():
     except:
         return None
 
+
+
 def load_html():
     with open('index.html', 'r') as f:
         return f.read()
-    
+
 html_template = load_html()
 
-temp_value = 23.5 
+# --- Stepper Control with Timer ---
+stepper_timer = Timer(-1)
+step_state = 0
 
+def stepper_pulse(timer):
+    global step_state
+    STEP_PIN.value(1)
+    time.sleep_us(2) 
+    STEP_PIN.value(0)
+    step_state ^= 1
 
-# Connect to WiFi
+def update_stepper():
+    DIR_PIN.value(direction)
+    if speed > 0:
+        period = int(1000 / speed)  # ms per step
+        stepper_timer.init(period=period, mode=Timer.PERIODIC, callback=stepper_pulse)
+    else:
+        stepper_timer.deinit()
+
 if not connect_wifi():
     raise RuntimeError("Network connection failed")
+update_stepper()
 
-# Set up web server
 s = socket.socket()
 s.bind(('0.0.0.0', 80))
 s.listen(1)
@@ -66,23 +78,29 @@ s.listen(1)
 while True:
     cl, addr = s.accept()
     request = cl.recv(1024).decode()
-    
-    # Process requests
-    if '/LED' in request:
-        # Existing LED control logic
-        pass
-    elif '/stepper/' in request:
-        parts = request.split()
-        if 'stepper/left' in parts[1]:
-            steps = int(parts[1].split('/')[-1])
-            stepper.step(-steps)
-        elif 'stepper/right' in parts[1]:
-            steps = int(parts[1].split('/')[-1])
-            stepper.step(steps)
-    elif '/refresh' in request:
+    if '/stepper/speed' in request:
+        try:
+            idx = request.find('value=')
+            if idx != -1:
+                val_str = request[idx+6:].split('&')[0].split(' ')[0]
+                new_speed = int(val_str)
+                if 1 <= new_speed <= 1000:
+                    speed = new_speed
+                    update_stepper()
+        except:
+            pass
+    if '/stepper/direction' in request:
+        if 'dir=0' in request:
+            direction = 0
+            update_stepper()
+        elif 'dir=1' in request:
+            direction = 1
+            update_stepper()
+    if '/refresh' in request:
         current_temp = read_temperature() or "N/A"
-        
-    response = response = html_template.format(temp=current_temp)
+    response = html_template.format(temp=current_temp, speed=speed)
+    with open('output.html', 'w') as f:
+        f.write(response)
     cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
     cl.send(response)
     cl.close()
