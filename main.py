@@ -5,7 +5,7 @@ import time
 import onewire
 import ds18x20
 
-TEMP_PIN = Pin(22)  # DS18B20
+TEMP_PIN = Pin(22) 
 STEP_PIN = Pin(19, Pin.OUT)  
 DIR_PIN = Pin(18, Pin.OUT)   
 
@@ -48,7 +48,6 @@ def load_html():
 
 html_template = load_html()
 
-# --- Stepper Control with Timer ---
 stepper_timer = Timer(-1)
 step_state = 0
 
@@ -62,7 +61,7 @@ def stepper_pulse(timer):
 def update_stepper():
     DIR_PIN.value(direction)
     if speed > 0:
-        period = int(1000 / speed)  # ms per step
+        period = int(1000 / speed)
         stepper_timer.init(period=period, mode=Timer.PERIODIC, callback=stepper_pulse)
     else:
         stepper_timer.deinit()
@@ -99,8 +98,12 @@ while True:
     if '/refresh' in request:
         current_temp = read_temperature() or "N/A"
     response = html_template.format(temp=current_temp, speed=speed)
+
+    """
+    for testing the html
     with open('output.html', 'w') as f:
-        f.write(response)
+        f.write(response) 
+    """
     cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
     cl.send(response)
     cl.close()
